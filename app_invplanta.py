@@ -186,7 +186,7 @@ st.markdown("""
 # ──────────────────────────────────────────────
 # CABECERA
 # ──────────────────────────────────────────────
-st.title("🧪 Sistema de Inventario en Planta")
+st.title("Sistema de Inventario en Planta")
 st.markdown("---")
 
 # ──────────────────────────────────────────────
