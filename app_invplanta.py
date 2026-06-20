@@ -12,6 +12,7 @@ INVENTARIO_PATH = "inventario.xlsx"
 REGISTROS_PATH  = "registros_conteo.json"
 EXCEL_REGISTROS = "registros_conteo.xlsx"
 CONTEOS = [1, 2, 3, 4, 5]  # Configuración de conteos numerados
+UM_OPCIONES = ["UNIDADES", "KILOGRAMOS", "MOLDES", "PLANCHA"]  # Opciones disponibles de Unidad de Medida
 
 st.set_page_config(page_title="Sistema de Dosimetría", page_icon="🧪", layout="wide")
 
@@ -217,19 +218,29 @@ with tab1:
         )
 
     if insumo_sel != "-- Seleccione un insumo --":
-        fila   = df_inv[df_inv["INSUMO"] == insumo_sel].iloc[0]
-        codigo = fila["CÓDIGO"]
-        um     = fila.get("UM", "")
-
-        c1, c2, c3 = st.columns(3)
-        c1.markdown(f"<div class='metric-box'>🔑 <b>Código</b><br>{codigo}</div>", unsafe_allow_html=True)
-        c2.markdown(f"<div class='metric-box'>📦 <b>Insumo</b><br>{insumo_sel}</div>", unsafe_allow_html=True)
-        c3.markdown(f"<div class='metric-box'>⚖️ <b>UM</b><br>{um}</div>", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
+        fila          = df_inv[df_inv["INSUMO"] == insumo_sel].iloc[0]
+        codigo        = fila["CÓDIGO"]
+        um_inventario = fila.get("UM", "")
 
         clave         = f"{fecha_str}__{codigo}"
         existente     = registros.get(clave, {})
         mesas_previas = existente.get("mesas", {str(c_num): 0 for c_num in CONTEOS})
+
+        # Determinar el valor por defecto de la UM: prioriza lo ya guardado para
+        # este registro; si no existe, intenta usar la UM del inventario; si
+        # ninguna coincide con las opciones disponibles, usa la primera opción.
+        um_guardada = existente.get("um", um_inventario)
+        if um_guardada in UM_OPCIONES:
+            idx_um = UM_OPCIONES.index(um_guardada)
+        else:
+            idx_um = 0
+
+        c1, c2, c3 = st.columns(3)
+        c1.markdown(f"<div class='metric-box'>🔑 <b>Código</b><br>{codigo}</div>", unsafe_allow_html=True)
+        c2.markdown(f"<div class='metric-box'>📦 <b>Insumo</b><br>{insumo_sel}</div>", unsafe_allow_html=True)
+        with c3:
+            um = st.selectbox("⚖️ UM", UM_OPCIONES, index=idx_um, key=f"um_sel_{clave}")
+        st.markdown("<br>", unsafe_allow_html=True)
 
         st.markdown("### 🔢 Desglose de Conteos")
         cols_conteos = st.columns(5)
