@@ -6,66 +6,63 @@ import io
 from datetime import date, datetime
 
 # ──────────────────────────────────────────────
-# CONFIGURACIÓN
+# CONFIGURACIÓN GENERAL Y CONSTANTES
 # ──────────────────────────────────────────────
 INVENTARIO_PATH = "inventario.xlsx"
 REGISTROS_PATH = "registros_conteo.json"
 EXCEL_REGISTROS = "registros_conteo.xlsx"
-CONTEOS = [1, 2, 3, 4, 5]  # Configuración de conteos numerados
+CONTEOS = [1, 2, 3, 4, 5]  # Números de conteo configurados
 
-# Unidades de medida sugeridas para el formulario de creación/edición
+# Unidades de medida frecuentes para los formularios
 UM_SUGERIDAS = [
     "UNIDAD (BIENES)", "KILOGRAMO", "UND", "PQT x 100UND", "CAJA", 
     "BOLSA x 1KGS", "BOTELLA", "ROLLO", "LITRO", "PQT x 1000UND", 
     "GALON", "CAJA x 10KGS", "PQT x 50UND", "SACO x 25KGS", "PAR"
 ]
 
-st.set_page_config(page_title="Sistema de Dosimetría", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="Sistema de Dosimetría e Inventario", page_icon="🧪", layout="wide")
 
 # ──────────────────────────────────────────────
-# CARGA Y PERSISTENCIA DE DATOS
+# FUNCIONES DE CARGA Y PERSISTENCIA
 # ──────────────────────────────────────────────
 @st.cache_data(ttl=60)
 def cargar_inventario() -> pd.DataFrame:
     """
-    Carga el inventario maestro, limpia columnas/valores y genera una clave única
-    (CÓDIGO — INSUMO) para evitar colisiones con insumos de nombres duplicados.
+    Carga el inventario maestro desde inventario.xlsx, limpia columnas/valores 
+    y crea una columna 'DISPLAY' para las búsquedas.
     """
     try:
         df = pd.read_excel(INVENTARIO_PATH)
         df.columns = [c.strip().upper() for c in df.columns]
 
-        # Asegurar formato de texto y limpieza de espacios
+        # Limpieza y conversión a texto
         df["CÓDIGO"] = df["CÓDIGO"].astype(str).str.strip()
         df["INSUMO"] = df["INSUMO"].astype(str).str.strip()
-        
-        # Manejo de nulos en Unidad de Medida
         df["UM"] = df["UM"].fillna("UNIDAD (BIENES)").astype(str).str.strip().str.upper()
 
-        # Etiqueta única combinada para el buscador
+        # Clave única para buscadores en Streamlit
         df["DISPLAY"] = df["CÓDIGO"] + " — " + df["INSUMO"]
         return df
     except Exception as e:
-        st.error(f"⚠️ No se pudo cargar el archivo maestro de inventario: {e}")
+        st.error(f"⚠️ No se pudo cargar el maestro de inventario: {e}")
         return pd.DataFrame(columns=["CÓDIGO", "INSUMO", "UM", "DISPLAY"])
 
 
 def guardar_inventario(df: pd.DataFrame) -> bool:
     """
-    Guarda el dataframe del maestro de inventario en inventario.xlsx y limpia la caché.
+    Guarda las columnas base del maestro en inventario.xlsx y limpia la caché.
     """
     try:
-        # Mantener solo las columnas base necesarias para guardar
         cols_guardar = ["CÓDIGO", "INSUMO", "UM"]
         df_export = df[cols_guardar].copy()
         df_export.to_excel(INVENTARIO_PATH, index=False)
         cargar_inventario.clear()
         return True
     except PermissionError:
-        st.error("⚠️ No se pudo guardar porque **inventario.xlsx** está abierto en Excel. Ciérralo e intenta de nuevo.")
+        st.error("⚠️ No se pudo guardar porque **inventario.xlsx** está abierto en Excel. Ciérralo e intentalo de nuevo.")
         return False
     except Exception as e:
-        st.error(f"⚠️ Error al guardar el archivo de inventario: {e}")
+        st.error(f"⚠️ Error al guardar el maestro de inventario: {e}")
         return False
 
 
@@ -75,7 +72,7 @@ def cargar_registros() -> dict:
             with open(REGISTROS_PATH, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            st.error(f"Error al leer el archivo de registros JSON: {e}")
+            st.error(f"Error al leer el archivo JSON de registros: {e}")
             return {}
     return {}
 
@@ -174,9 +171,7 @@ def guardar_excel_registros(data: dict):
     except Exception as e:
         st.error(f"Error inesperado al generar Excel de registros: {e}")
 
-# ──────────────────────────────────────────────
-# HELPERS
-# ──────────────────────────────────────────────
+
 def excel_bytes(df: pd.DataFrame) -> bytes:
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -214,7 +209,7 @@ def excel_bytes(df: pd.DataFrame) -> bytes:
     return buf.getvalue()
 
 # ──────────────────────────────────────────────
-# ESTILOS CSS
+# ESTILOS VISUALES
 # ──────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -237,7 +232,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
-# CABECERA Y PESTAÑAS
+# CABECERA Y ESTRUCTURA PRINCIPAL
 # ──────────────────────────────────────────────
 st.title("Sistema de Inventario en Planta")
 st.markdown("---")
@@ -408,13 +403,12 @@ with tab2:
             st.warning(f"📭 No hay registros para el **{fecha_consulta_str}**")
 
 # ══════════════════════════════════════════════
-# TAB 3 — GESTIÓN DE INVENTARIO (NUEVO)
+# TAB 3 — GESTIÓN DE INVENTARIO
 # ══════════════════════════════════════════════
 with tab3:
     st.subheader("⚙️ Mantenimiento de Catálogo de Insumos")
     df_inv = cargar_inventario()
 
-    # Sub-pestañas para crear, editar y eliminar
     subtab1, subtab2, subtab3 = st.tabs([
         "➕ Agregar Insumo",
         "✏️ Editar Insumo",
@@ -427,7 +421,6 @@ with tab3:
     with subtab1:
         st.markdown("#### ➕ Registrar nuevo producto en `inventario.xlsx`")
         
-        # Generar sugerencia de código automático basado en el correlativo
         ultimo_num = len(df_inv) + 1
         codigo_sugerido = f"E100{ultimo_num:04d}"
 
@@ -498,7 +491,7 @@ with tab3:
                 if not edit_insumo_nombre:
                     st.error("⚠️ El nombre del insumo no puede estar vacío.")
                 else:
-                    idx_m) = df_inv[df_inv["CÓDIGO"] == codigo_edit].index[0]
+                    idx_m = df_inv[df_inv["CÓDIGO"] == codigo_edit].index[0]
                     df_inv.loc[idx_m, "INSUMO"] = edit_insumo_nombre
                     df_inv.loc[idx_m, "UM"] = um_edit_final
 
