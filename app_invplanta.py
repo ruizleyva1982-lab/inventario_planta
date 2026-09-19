@@ -13,6 +13,13 @@ REGISTROS_PATH = "registros_conteo.json"
 EXCEL_REGISTROS = "registros_conteo.xlsx"
 CONTEOS = [1, 2, 3, 4, 5]  # Configuración de conteos numerados
 
+# Unidades de medida sugeridas para el formulario de creación/edición
+UM_SUGERIDAS = [
+    "UNIDAD (BIENES)", "KILOGRAMO", "UND", "PQT x 100UND", "CAJA", 
+    "BOLSA x 1KGS", "BOTELLA", "ROLLO", "LITRO", "PQT x 1000UND", 
+    "GALON", "CAJA x 10KGS", "PQT x 50UND", "SACO x 25KGS", "PAR"
+]
+
 st.set_page_config(page_title="Sistema de Dosimetría", page_icon="🧪", layout="wide")
 
 # ──────────────────────────────────────────────
@@ -21,8 +28,8 @@ st.set_page_config(page_title="Sistema de Dosimetría", page_icon="🧪", layout
 @st.cache_data(ttl=60)
 def cargar_inventario() -> pd.DataFrame:
     """
-    Carga el inventario maestro, limpia columnas/valores y genera una clave de despliegue
-    única (CÓDIGO — INSUMO) para evitar colisiones con insumos de nombres duplicados.
+    Carga el inventario maestro, limpia columnas/valores y genera una clave única
+    (CÓDIGO — INSUMO) para evitar colisiones con insumos de nombres duplicados.
     """
     try:
         df = pd.read_excel(INVENTARIO_PATH)
@@ -33,7 +40,7 @@ def cargar_inventario() -> pd.DataFrame:
         df["INSUMO"] = df["INSUMO"].astype(str).str.strip()
         
         # Manejo de nulos en Unidad de Medida
-        df["UM"] = df["UM"].fillna("UNIDAD").astype(str).str.strip().str.upper()
+        df["UM"] = df["UM"].fillna("UNIDAD (BIENES)").astype(str).str.strip().str.upper()
 
         # Etiqueta única combinada para el buscador
         df["DISPLAY"] = df["CÓDIGO"] + " — " + df["INSUMO"]
@@ -41,6 +48,25 @@ def cargar_inventario() -> pd.DataFrame:
     except Exception as e:
         st.error(f"⚠️ No se pudo cargar el archivo maestro de inventario: {e}")
         return pd.DataFrame(columns=["CÓDIGO", "INSUMO", "UM", "DISPLAY"])
+
+
+def guardar_inventario(df: pd.DataFrame) -> bool:
+    """
+    Guarda el dataframe del maestro de inventario en inventario.xlsx y limpia la caché.
+    """
+    try:
+        # Mantener solo las columnas base necesarias para guardar
+        cols_guardar = ["CÓDIGO", "INSUMO", "UM"]
+        df_export = df[cols_guardar].copy()
+        df_export.to_excel(INVENTARIO_PATH, index=False)
+        cargar_inventario.clear()
+        return True
+    except PermissionError:
+        st.error("⚠️ No se pudo guardar porque **inventario.xlsx** está abierto en Excel. Ciérralo e intenta de nuevo.")
+        return False
+    except Exception as e:
+        st.error(f"⚠️ Error al guardar el archivo de inventario: {e}")
+        return False
 
 
 def cargar_registros() -> dict:
@@ -216,9 +242,10 @@ st.markdown("""
 st.title("Sistema de Inventario en Planta")
 st.markdown("---")
 
-tab1, tab2 = st.tabs([
+tab1, tab2, tab3 = st.tabs([
     "📋 Registro de Conteo",
-    "🔍 Consulta por Fecha"
+    "🔍 Consulta por Fecha",
+    "⚙️ Gestión de Inventario"
 ])
 
 # ══════════════════════════════════════════════
@@ -243,26 +270,22 @@ with tab1:
         )
 
     if opcion_sel != "-- Seleccione un insumo --":
-        # Filtrado exacto por la etiqueta combinada única
         fila = df_inv[df_inv["DISPLAY"] == opcion_sel].iloc[0]
         codigo = fila["CÓDIGO"]
         insumo_nombre = fila["INSUMO"]
         um_inventario = fila["UM"]
 
-        # Clave primaria basada únicamente en el CÓDIGO (garantiza unicidad exacta)
         clave = f"{fecha_str}__{codigo}"
         existente = registros.get(clave, {})
         mesas_previas = existente.get("mesas", {str(c_num): 0 for c_num in CONTEOS})
 
-        # Cargar opciones de UM incluyendo la UM maestra para evitar discrepancias
         um_guardada = existente.get("um", um_inventario)
         
-        # Generar lista dinámica de opciones de UM conservando las personalizadas del maestro
         opciones_um_dinamicas = list(dict.fromkeys([
-            um_guardada, um_inventario, "UNIDAD", "UNIDAD (BIENES)", 
-            "KILOGRAMO", "UND", "ROLLO", "CAJA", "BOLSA", "LITRO", "MOLDES", "PLANCHA"
+            um_guardada, um_inventario, "UNIDAD (BIENES)", "KILOGRAMO", "UND", 
+            "ROLLO", "CAJA", "BOLSA", "LITRO", "MOLDES", "PLANCHA"
         ]))
-        idx_um = opciones_um_dinamicas.index(um_guardada)
+        idx_um = opciones_um_dinamicas.index(um_guardada) if um_guardada in opciones_um_dinamicas else 0
 
         c1, c2, c3 = st.columns(3)
         c1.markdown(f"<div class='metric-box'>🔑 <b>Código</b><br>{codigo}</div>", unsafe_allow_html=True)
@@ -383,3 +406,130 @@ with tab2:
             )
         else:
             st.warning(f"📭 No hay registros para el **{fecha_consulta_str}**")
+
+# ══════════════════════════════════════════════
+# TAB 3 — GESTIÓN DE INVENTARIO (NUEVO)
+# ══════════════════════════════════════════════
+with tab3:
+    st.subheader("⚙️ Mantenimiento de Catálogo de Insumos")
+    df_inv = cargar_inventario()
+
+    # Sub-pestañas para crear, editar y eliminar
+    subtab1, subtab2, subtab3 = st.tabs([
+        "➕ Agregar Insumo",
+        "✏️ Editar Insumo",
+        "🗑️ Eliminar Insumo"
+    ])
+
+    # ------------------------------------------
+    # SUBTAB 1: AGREGAR INSUMO
+    # ------------------------------------------
+    with subtab1:
+        st.markdown("#### ➕ Registrar nuevo producto en `inventario.xlsx`")
+        
+        # Generar sugerencia de código automático basado en el correlativo
+        ultimo_num = len(df_inv) + 1
+        codigo_sugerido = f"E100{ultimo_num:04d}"
+
+        with st.form("form_nuevo_insumo", clear_on_submit=True):
+            col_a1, col_a2 = st.columns([1, 2])
+            with col_a1:
+                nuevo_codigo = st.text_input("🔑 Código", value=codigo_sugerido, help="Debe ser un código único")
+            with col_a2:
+                nuevo_insumo = st.text_input("📦 Nombre del Insumo", help="Ejemplo: HARINA DE TRIGO 25KG")
+
+            col_a3, col_a4 = st.columns(2)
+            with col_a3:
+                nueva_um_select = st.selectbox("⚖️ Unidad de Medida (UM)", UM_SUGERIDAS)
+            with col_a4:
+                nueva_um_custom = st.text_input("✍️ O escribe una UM personalizada (Opcional)")
+
+            btn_crear = st.form_submit_button("➕ Guardar Nuevo Insumo", type="primary", use_container_width=True)
+
+        if btn_crear:
+            nuevo_codigo = nuevo_codigo.strip().upper()
+            nuevo_insumo = nuevo_insumo.strip().upper()
+            um_final = nueva_um_custom.strip().upper() if nueva_um_custom.strip() else nueva_um_select.upper()
+
+            if not nuevo_codigo or not nuevo_insumo:
+                st.error("⚠️ El código y el nombre del insumo no pueden estar vacíos.")
+            elif nuevo_codigo in df_inv["CÓDIGO"].values:
+                st.error(f"⚠️ El código **{nuevo_codigo}** ya existe en el inventario.")
+            else:
+                nueva_fila = pd.DataFrame([{"CÓDIGO": nuevo_codigo, "INSUMO": nuevo_insumo, "UM": um_final}])
+                df_inv_actualizado = pd.concat([df_inv, nueva_fila], ignore_index=True)
+                
+                if guardar_inventario(df_inv_actualizado):
+                    st.success(f"✅ Insumo **[{nuevo_codigo}] {nuevo_insumo}** creado exitosamente.")
+                    st.rerun()
+
+    # ------------------------------------------
+    # SUBTAB 2: EDITAR INSUMO
+    # ------------------------------------------
+    with subtab2:
+        st.markdown("#### ✏️ Editar producto existente en `inventario.xlsx`")
+        
+        insumo_editar_sel = st.selectbox(
+            "🔍 Seleccionar insumo a editar",
+            ["-- Seleccione un insumo --"] + df_inv["DISPLAY"].tolist(),
+            key="edit_insumo_sel"
+        )
+
+        if insumo_editar_sel != "-- Seleccione un insumo --":
+            fila_edit = df_inv[df_inv["DISPLAY"] == insumo_editar_sel].iloc[0]
+            codigo_edit = fila_edit["CÓDIGO"]
+            insumo_edit = fila_edit["INSUMO"]
+            um_edit = fila_edit["UM"]
+
+            with st.form("form_editar_insumo"):
+                st.info(f"Modificando insumo con código: **{codigo_edit}**")
+                edit_insumo_nombre = st.text_input("📦 Nombre del Insumo", value=insumo_edit)
+                
+                idx_um_edit = UM_SUGERIDAS.index(um_edit) if um_edit in UM_SUGERIDAS else 0
+                edit_um_select = st.selectbox("⚖️ Unidad de Medida (UM)", UM_SUGERIDAS, index=idx_um_edit)
+                edit_um_custom = st.text_input("✍️ O escribir UM personalizada", value="" if um_edit in UM_SUGERIDAS else um_edit)
+
+                btn_guardar_edit = st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True)
+
+            if btn_guardar_edit:
+                edit_insumo_nombre = edit_insumo_nombre.strip().upper()
+                um_edit_final = edit_um_custom.strip().upper() if edit_um_custom.strip() else edit_um_select.upper()
+
+                if not edit_insumo_nombre:
+                    st.error("⚠️ El nombre del insumo no puede estar vacío.")
+                else:
+                    idx_m) = df_inv[df_inv["CÓDIGO"] == codigo_edit].index[0]
+                    df_inv.loc[idx_m, "INSUMO"] = edit_insumo_nombre
+                    df_inv.loc[idx_m, "UM"] = um_edit_final
+
+                    if guardar_inventario(df_inv):
+                        st.success(f"✅ Insumo **[{codigo_edit}]** actualizado correctamente.")
+                        st.rerun()
+
+    # ------------------------------------------
+    # SUBTAB 3: ELIMINAR INSUMO
+    # ------------------------------------------
+    with subtab3:
+        st.markdown("#### 🗑️ Eliminar insumo de `inventario.xlsx`")
+        
+        insumo_del_sel = st.selectbox(
+            "🔍 Seleccionar insumo a eliminar",
+            ["-- Seleccione un insumo --"] + df_inv["DISPLAY"].tolist(),
+            key="del_insumo_sel"
+        )
+
+        if insumo_del_sel != "-- Seleccione un insumo --":
+            fila_del = df_inv[df_inv["DISPLAY"] == insumo_del_sel].iloc[0]
+            codigo_del = fila_del["CÓDIGO"]
+            insumo_del = fila_del["INSUMO"]
+            um_del = fila_del["UM"]
+
+            st.warning(f"⚠️ ¿Estás seguro de que deseas eliminar **[{codigo_del}] {insumo_del}** ({um_del})?")
+            st.error("Esta acción eliminará el producto del catálogo maestro `inventario.xlsx`.")
+
+            if st.button("🗑️ Confirmar y Eliminar Insumo", type="primary", use_container_width=True):
+                df_inv_filtrado = df_inv[df_inv["CÓDIGO"] != codigo_del]
+                
+                if guardar_inventario(df_inv_filtrado):
+                    st.success(f"✅ Insumo **[{codigo_del}] {insumo_del}** eliminado correctamente.")
+                    st.rerun()
