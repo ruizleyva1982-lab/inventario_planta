@@ -23,6 +23,12 @@ UM_SUGERIDAS = [
     "GALON", "CAJA x 10KGS", "PQT x 50UND", "SACO x 25KGS", "PAR"
 ]
 
+# Opciones de Ubicación solicitadas
+UBICACIONES_SUGERIDAS = [
+    "Anaquel", "Empaque", "Sala Procesos", "Sala Rellenos", 
+    "Camara Rellenos", "Camara Cocina", "Custodia", "Sala Desmolde", "Sala Hornos"
+]
+
 st.set_page_config(page_title="Sistema de Dosimetría e Inventario", page_icon="🧪", layout="wide")
 
 # ──────────────────────────────────────────────
@@ -123,7 +129,7 @@ def guardar_excel_registros(data: dict):
             ws = wb.create_sheet(title=fecha.replace("-", ""))
             
             # Encabezado principal
-            ws.merge_cells("A1:J1")
+            ws.merge_cells("A1:K1")
             ws["A1"] = f"REGISTRO DE CONTEO — {fecha}"
             ws["A1"].font = Font(name="Arial", bold=True, size=13, color="FFFFFF")
             ws["A1"].fill = PatternFill("solid", fgColor=color_h)
@@ -131,7 +137,7 @@ def guardar_excel_registros(data: dict):
             ws.row_dimensions[1].height = 28
             
             # Subencabezados
-            encabezados = ["CÓDIGO", "INSUMO", "GRUPO DE ARTÍCULOS", "UM", "CONTEO 1", "CONTEO 2", "CONTEO 3", "CONTEO 4", "CONTEO 5", "TOTAL"]
+            encabezados = ["CÓDIGO", "INSUMO", "GRUPO DE ARTÍCULOS", "UBICACIÓN", "UM", "CONTEO 1", "CONTEO 2", "CONTEO 3", "CONTEO 4", "CONTEO 5", "TOTAL"]
             for col, h in enumerate(encabezados, 1):
                 c = ws.cell(row=2, column=col, value=h)
                 c.font = Font(name="Arial", bold=True, color="FFFFFF")
@@ -146,6 +152,7 @@ def guardar_excel_registros(data: dict):
                     reg.get("codigo", ""),
                     reg.get("insumo", ""),
                     reg.get("grupo", ""),
+                    reg.get("ubicacion", ""),
                     reg.get("um", ""),
                     reg.get("mesas", {}).get("1", 0),
                     reg.get("mesas", {}).get("2", 0),
@@ -156,22 +163,22 @@ def guardar_excel_registros(data: dict):
                 ]
                 for ci, val in enumerate(vals, 1):
                     c = ws.cell(row=ri, column=ci, value=val)
-                    c.font = Font(name="Arial", size=10, bold=(ci == 10), color=(color_h if ci == 10 else "000000"))
+                    c.font = Font(name="Arial", size=10, bold=(ci == 11), color=(color_h if ci == 11 else "000000"))
                     c.border = borde
-                    c.alignment = Alignment(horizontal="left" if ci in [2, 3] else "center")
+                    c.alignment = Alignment(horizontal="left" if ci in [2, 3, 4] else "center")
                 if ri % 2 == 0:
-                    for ci in range(1, 11):
+                    for ci in range(1, 12):
                         ws.cell(row=ri, column=ci).fill = PatternFill("solid", fgColor="EEF2F7")
 
             # Fila de Totales
             uf = 2 + len(regs) + 1
-            ws.merge_cells(f"A{uf}:D{uf}")
+            ws.merge_cells(f"A{uf}:E{uf}")
             ws[f"A{uf}"] = "TOTAL GENERAL"
             ws[f"A{uf}"].font = Font(name="Arial", bold=True, color="FFFFFF")
             ws[f"A{uf}"].fill = PatternFill("solid", fgColor=color_h)
             ws[f"A{uf}"].alignment = Alignment(horizontal="center")
             
-            for ci in range(5, 11):
+            for ci in range(6, 12):
                 l = get_column_letter(ci)
                 c = ws.cell(row=uf, column=ci, value=f"=SUM({l}3:{l}{uf-1})")
                 c.font = Font(name="Arial", bold=True, color="FFFFFF")
@@ -179,7 +186,7 @@ def guardar_excel_registros(data: dict):
                 c.alignment = Alignment(horizontal="center")
                 c.border = borde
 
-            for ci, w in enumerate([14, 40, 25, 15, 12, 12, 12, 12, 12, 12], 1):
+            for ci, w in enumerate([14, 40, 25, 20, 15, 12, 12, 12, 12, 12, 12], 1):
                 ws.column_dimensions[get_column_letter(ci)].width = w
 
         wb.save(EXCEL_REGISTROS)
@@ -213,7 +220,7 @@ def excel_bytes(df: pd.DataFrame) -> bytes:
             c = ws.cell(row=ri, column=ci, value=val)
             c.font = Font(name="Arial", size=10)
             c.border = borde
-            c.alignment = Alignment(horizontal="left" if ci in [2, 3] else "center")
+            c.alignment = Alignment(horizontal="left" if ci in [2, 3, 4] else "center")
         if ri % 2 == 0:
             for ci in range(1, len(cols) + 1):
                 ws.cell(row=ri, column=ci).fill = PatternFill("solid", fgColor="EEF2F7")
@@ -268,7 +275,7 @@ with tab1:
     registros = cargar_registros()
     st.subheader("📋 Registro de Conteo General")
 
-    col_fecha, col_grupo, col_buscar = st.columns([2, 3, 4])
+    col_fecha, col_grupo, col_ubicacion, col_buscar = st.columns([2, 3, 3, 4])
     with col_fecha:
         fecha_actual_peru = datetime.now(PERU_TZ).date()
         fecha_sel = st.date_input("📅 Fecha de conteo", value=fecha_actual_peru, key="fecha_reg")
@@ -284,6 +291,9 @@ with tab1:
         
         lista_grupos = ["-- Todos los grupos --"] + grupos_detectados
         grupo_sel = st.selectbox("🏷️ Grupo de Artículos", lista_grupos, key="grupo_reg_sel")
+
+    with col_ubicacion:
+        ubicacion_sel = st.selectbox("📍 Ubicación", ["-- Seleccione ubicación --"] + UBICACIONES_SUGERIDAS, key="ubicacion_reg_sel")
 
     with col_buscar:
         df_filtrado_insumos = df_inv.copy()
@@ -309,6 +319,7 @@ with tab1:
         mesas_previas = existente.get("mesas", {str(c_num): 0 for c_num in CONTEOS})
 
         um_guardada = existente.get("um", um_inventario)
+        ubicacion_guardada = existente.get("ubicacion", ubicacion_sel if ubicacion_sel != "-- Seleccione ubicación --" else "")
         
         opciones_um_dinamicas = list(dict.fromkeys([
             um_guardada, um_inventario, "UNIDAD (BIENES)", "KILOGRAMO", "UND", 
@@ -346,20 +357,25 @@ with tab1:
         col_guard, col_eliminar = st.columns([3, 1])
         with col_guard:
             if st.button("💾 Guardar Registro", use_container_width=True, type="primary"):
-                registros[clave] = {
-                    "fecha": fecha_str,
-                    "codigo": codigo,
-                    "insumo": insumo_nombre,
-                    "grupo": grupo_inventario,
-                    "um": um,
-                    "mesas": valores_conteo,
-                    "total": total,
-                    "updated": datetime.now(PERU_TZ).isoformat()
-                }
-                guardar_registros(registros)
-                st.success(f"✅ Registro guardado para **[{codigo}] {insumo_nombre}** el **{fecha_str}**")
-                st.info("📊 Archivo de registros actualizado correctamente.")
-                st.balloons()
+                if ubicacion_sel == "-- Seleccione ubicación --" and not ubicacion_guardada:
+                    st.warning("⚠️ Por favor, selecciona una **Ubicación** antes de guardar.")
+                else:
+                    ubicacion_final = ubicacion_sel if ubicacion_sel != "-- Seleccione ubicación --" else ubicacion_guardada
+                    registros[clave] = {
+                        "fecha": fecha_str,
+                        "codigo": codigo,
+                        "insumo": insumo_nombre,
+                        "grupo": grupo_inventario,
+                        "ubicacion": ubicacion_final,
+                        "um": um,
+                        "mesas": valores_conteo,
+                        "total": total,
+                        "updated": datetime.now(PERU_TZ).isoformat()
+                    }
+                    guardar_registros(registros)
+                    st.success(f"✅ Registro guardado para **[{codigo}] {insumo_nombre}** el **{fecha_str}**")
+                    st.info("📊 Archivo de registros actualizado correctamente.")
+                    st.balloons()
 
         with col_eliminar:
             if clave in registros:
@@ -374,7 +390,7 @@ with tab1:
     
     if registros_dia:
         st.markdown(f"### 📑 Registros guardados del día: {fecha_str} ({len(registros_dia)} insumos)")
-        df_dia = pd.DataFrame(registros_dia)[["codigo", "insumo", "grupo", "mesas", "total", "um"]]
+        df_dia = pd.DataFrame(registros_dia)[["codigo", "insumo", "grupo", "ubicacion", "mesas", "total", "um"]]
         
         for c_num in CONTEOS:
             df_dia[f"Conteo {c_num}"] = df_dia["mesas"].apply(lambda x: x.get(str(c_num), 0))
@@ -383,11 +399,12 @@ with tab1:
             "codigo": "Código",
             "insumo": "Insumo",
             "grupo": "Grupo de Artículos",
+            "ubicacion": "Ubicación",
             "total": "Total",
             "um": "UM"
         })
         
-        columnas_ordenadas = ["Código", "Insumo", "Grupo de Artículos", "UM"] + [f"Conteo {c_num}" for c_num in CONTEOS] + ["Total"]
+        columnas_ordenadas = ["Código", "Insumo", "Grupo de Artículos", "Ubicación", "UM"] + [f"Conteo {c_num}" for c_num in CONTEOS] + ["Total"]
         st.dataframe(df_dia[columnas_ordenadas].sort_values("Insumo"), use_container_width=True, hide_index=True)
     else:
         st.info(f"📭 No hay registros para el {fecha_str}")
@@ -418,11 +435,12 @@ with tab2:
                 "codigo": "Código",
                 "insumo": "Insumo",
                 "grupo": "Grupo de Artículos",
+                "ubicacion": "Ubicación",
                 "total": "Total",
                 "um": "UM"
             })
             
-            cols_res = ["Código", "Insumo", "Grupo de Artículos", "UM"] + [f"Conteo {c_num}" for c_num in CONTEOS] + ["Total"]
+            cols_res = ["Código", "Insumo", "Grupo de Artículos", "Ubicación", "UM"] + [f"Conteo {c_num}" for c_num in CONTEOS] + ["Total"]
             df_res = df_res[cols_res].sort_values("Insumo")
             
             st.dataframe(df_res, use_container_width=True, hide_index=True)
