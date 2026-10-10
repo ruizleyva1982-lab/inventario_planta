@@ -39,13 +39,18 @@ def cargar_inventario() -> pd.DataFrame:
         df["CÓDIGO"] = df["CÓDIGO"].astype(str).str.strip()
         df["INSUMO"] = df["INSUMO"].astype(str).str.strip()
         df["UM"] = df["UM"].fillna("UNIDAD (BIENES)").astype(str).str.strip().str.upper()
+        
+        if "GRUPO DE ARTÍCULOS" in df.columns:
+            df["GRUPO DE ARTÍCULOS"] = df["GRUPO DE ARTÍCULOS"].fillna("GENERAL").astype(str).str.strip().str.upper()
+        else:
+            df["GRUPO DE ARTÍCULOS"] = "GENERAL"
 
         # Clave única para buscadores en Streamlit
         df["DISPLAY"] = df["CÓDIGO"] + " — " + df["INSUMO"]
         return df
     except Exception as e:
         st.error(f"⚠️ No se pudo cargar el maestro de inventario: {e}")
-        return pd.DataFrame(columns=["CÓDIGO", "INSUMO", "UM", "DISPLAY"])
+        return pd.DataFrame(columns=["CÓDIGO", "INSUMO", "UM", "GRUPO DE ARTÍCULOS", "DISPLAY"])
 
 
 def guardar_inventario(df: pd.DataFrame) -> bool:
@@ -53,7 +58,7 @@ def guardar_inventario(df: pd.DataFrame) -> bool:
     Guarda las columnas base del maestro en inventario.xlsx y limpia la caché.
     """
     try:
-        cols_guardar = ["CÓDIGO", "INSUMO", "UM"]
+        cols_guardar = ["CÓDIGO", "INSUMO", "UM", "GRUPO DE ARTÍCULOS"]
         df_export = df[cols_guardar].copy()
         df_export.to_excel(INVENTARIO_PATH, index=False)
         cargar_inventario.clear()
@@ -107,7 +112,7 @@ def guardar_excel_registros(data: dict):
             ws = wb.create_sheet(title=fecha.replace("-", ""))
             
             # Encabezado principal
-            ws.merge_cells("A1:I1")
+            ws.merge_cells("A1:J1")
             ws["A1"] = f"REGISTRO DE CONTEO — {fecha}"
             ws["A1"].font = Font(name="Arial", bold=True, size=13, color="FFFFFF")
             ws["A1"].fill = PatternFill("solid", fgColor=color_h)
@@ -115,7 +120,7 @@ def guardar_excel_registros(data: dict):
             ws.row_dimensions[1].height = 28
             
             # Subencabezados
-            encabezados = ["CÓDIGO", "INSUMO", "UM", "CONTEO 1", "CONTEO 2", "CONTEO 3", "CONTEO 4", "CONTEO 5", "TOTAL"]
+            encabezados = ["CÓDIGO", "INSUMO", "GRUPO", "UM", "CONTEO 1", "CONTEO 2", "CONTEO 3", "CONTEO 4", "CONTEO 5", "TOTAL"]
             for col, h in enumerate(encabezados, 1):
                 c = ws.cell(row=2, column=col, value=h)
                 c.font = Font(name="Arial", bold=True, color="FFFFFF")
@@ -129,6 +134,7 @@ def guardar_excel_registros(data: dict):
                 vals = [
                     reg.get("codigo", ""),
                     reg.get("insumo", ""),
+                    reg.get("grupo", "GENERAL"),
                     reg.get("um", ""),
                     reg.get("mesas", {}).get("1", 0),
                     reg.get("mesas", {}).get("2", 0),
@@ -139,22 +145,22 @@ def guardar_excel_registros(data: dict):
                 ]
                 for ci, val in enumerate(vals, 1):
                     c = ws.cell(row=ri, column=ci, value=val)
-                    c.font = Font(name="Arial", size=10, bold=(ci == 9), color=(color_h if ci == 9 else "000000"))
+                    c.font = Font(name="Arial", size=10, bold=(ci == 10), color=(color_h if ci == 10 else "000000"))
                     c.border = borde
-                    c.alignment = Alignment(horizontal="left" if ci == 2 else "center")
+                    c.alignment = Alignment(horizontal="left" if ci in [2, 3] else "center")
                 if ri % 2 == 0:
-                    for ci in range(1, 10):
+                    for ci in range(1, 11):
                         ws.cell(row=ri, column=ci).fill = PatternFill("solid", fgColor="EEF2F7")
 
             # Fila de Totales
             uf = 2 + len(regs) + 1
-            ws.merge_cells(f"A{uf}:C{uf}")
+            ws.merge_cells(f"A{uf}:D{uf}")
             ws[f"A{uf}"] = "TOTAL GENERAL"
             ws[f"A{uf}"].font = Font(name="Arial", bold=True, color="FFFFFF")
             ws[f"A{uf}"].fill = PatternFill("solid", fgColor=color_h)
             ws[f"A{uf}"].alignment = Alignment(horizontal="center")
             
-            for ci in range(4, 10):
+            for ci in range(5, 11):
                 l = get_column_letter(ci)
                 c = ws.cell(row=uf, column=ci, value=f"=SUM({l}3:{l}{uf-1})")
                 c.font = Font(name="Arial", bold=True, color="FFFFFF")
@@ -162,7 +168,7 @@ def guardar_excel_registros(data: dict):
                 c.alignment = Alignment(horizontal="center")
                 c.border = borde
 
-            for ci, w in enumerate([14, 40, 15, 12, 12, 12, 12, 12, 12], 1):
+            for ci, w in enumerate([14, 40, 22, 15, 12, 12, 12, 12, 12, 12], 1):
                 ws.column_dimensions[get_column_letter(ci)].width = w
 
         wb.save(EXCEL_REGISTROS)
@@ -196,7 +202,7 @@ def excel_bytes(df: pd.DataFrame) -> bytes:
             c = ws.cell(row=ri, column=ci, value=val)
             c.font = Font(name="Arial", size=10)
             c.border = borde
-            c.alignment = Alignment(horizontal="left" if ci == 2 else "center")
+            c.alignment = Alignment(horizontal="left" if ci in [2, 3] else "center")
         if ri % 2 == 0:
             for ci in range(1, len(cols) + 1):
                 ws.cell(row=ri, column=ci).fill = PatternFill("solid", fgColor="EEF2F7")
@@ -251,15 +257,23 @@ with tab1:
     registros = cargar_registros()
     st.subheader("📋 Registro de Conteo General")
 
-    col_fecha, col_buscar = st.columns([2, 4])
+    col_fecha, col_grupo, col_buscar = st.columns([2, 3, 4])
     with col_fecha:
         fecha_sel = st.date_input("📅 Fecha de conteo", value=date.today(), key="fecha_reg")
         fecha_str = fecha_sel.strftime("%Y-%m-%d")
     
+    with col_grupo:
+        lista_grupos = ["-- Todos los grupos --"] + sorted(df_inv["GRUPO DE ARTÍCULOS"].unique().tolist())
+        grupo_sel = st.selectbox("🏷️ Grupo de Artículos", lista_grupos, key="grupo_reg_sel")
+
     with col_buscar:
+        df_filtrado_insumos = df_inv.copy()
+        if grupo_sel != "-- Todos los grupos --":
+            df_filtrado_insumos = df_inv[df_inv["GRUPO DE ARTÍCULOS"] == grupo_sel]
+            
         opcion_sel = st.selectbox(
             "🔍 Buscar por Código o Insumo",
-            ["-- Seleccione un insumo --"] + df_inv["DISPLAY"].tolist(),
+            ["-- Seleccione un insumo --"] + df_filtrado_insumos["DISPLAY"].tolist(),
             key="insumo_sel",
             help="Escribe el código o el nombre del insumo para buscar"
         )
@@ -269,6 +283,7 @@ with tab1:
         codigo = fila["CÓDIGO"]
         insumo_nombre = fila["INSUMO"]
         um_inventario = fila["UM"]
+        grupo_inventario = fila["GRUPO DE ARTÍCULOS"]
 
         clave = f"{fecha_str}__{codigo}"
         existente = registros.get(clave, {})
@@ -282,10 +297,11 @@ with tab1:
         ]))
         idx_um = opciones_um_dinamicas.index(um_guardada) if um_guardada in opciones_um_dinamicas else 0
 
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         c1.markdown(f"<div class='metric-box'>🔑 <b>Código</b><br>{codigo}</div>", unsafe_allow_html=True)
         c2.markdown(f"<div class='metric-box'>📦 <b>Insumo</b><br>{insumo_nombre}</div>", unsafe_allow_html=True)
-        with c3:
+        c3.markdown(f"<div class='metric-box'>🏷️ <b>Grupo</b><br>{grupo_inventario}</div>", unsafe_allow_html=True)
+        with c4:
             um = st.selectbox("⚖️ Unidad de Medida (UM)", opciones_um_dinamicas, index=idx_um, key=f"um_sel_{clave}")
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -315,6 +331,7 @@ with tab1:
                     "fecha": fecha_str,
                     "codigo": codigo,
                     "insumo": insumo_nombre,
+                    "grupo": grupo_inventario,
                     "um": um,
                     "mesas": valores_conteo,
                     "total": total,
@@ -338,7 +355,7 @@ with tab1:
     
     if registros_dia:
         st.markdown(f"### 📑 Registros guardados del día: {fecha_str} ({len(registros_dia)} insumos)")
-        df_dia = pd.DataFrame(registros_dia)[["codigo", "insumo", "mesas", "total", "um"]]
+        df_dia = pd.DataFrame(registros_dia)[["codigo", "insumo", "grupo", "mesas", "total", "um"]]
         
         for c_num in CONTEOS:
             df_dia[f"Conteo {c_num}"] = df_dia["mesas"].apply(lambda x: x.get(str(c_num), 0))
@@ -346,11 +363,12 @@ with tab1:
         df_dia = df_dia.drop(columns=["mesas"]).rename(columns={
             "codigo": "Código",
             "insumo": "Insumo",
+            "grupo": "Grupo",
             "total": "Total",
             "um": "UM"
         })
         
-        columnas_ordenadas = ["Código", "Insumo", "UM"] + [f"Conteo {c_num}" for c_num in CONTEOS] + ["Total"]
+        columnas_ordenadas = ["Código", "Insumo", "Grupo", "UM"] + [f"Conteo {c_num}" for c_num in CONTEOS] + ["Total"]
         st.dataframe(df_dia[columnas_ordenadas].sort_values("Insumo"), use_container_width=True, hide_index=True)
     else:
         st.info(f"📭 No hay registros para el {fecha_str}")
@@ -380,11 +398,12 @@ with tab2:
                 "fecha": "Fecha",
                 "codigo": "Código",
                 "insumo": "Insumo",
+                "grupo": "Grupo",
                 "total": "Total",
                 "um": "UM"
             })
             
-            cols_res = ["Código", "Insumo", "UM"] + [f"Conteo {c_num}" for c_num in CONTEOS] + ["Total"]
+            cols_res = ["Código", "Insumo", "Grupo", "UM"] + [f"Conteo {c_num}" for c_num in CONTEOS] + ["Total"]
             df_res = df_res[cols_res].sort_values("Insumo")
             
             st.dataframe(df_res, use_container_width=True, hide_index=True)
@@ -424,6 +443,8 @@ with tab3:
         ultimo_num = len(df_inv) + 1
         codigo_sugerido = f"E100{ultimo_num:04d}"
 
+        grupos_disponibles = sorted(df_inv["GRUPO DE ARTÍCULOS"].unique().tolist())
+
         with st.form("form_nuevo_insumo", clear_on_submit=True):
             col_a1, col_a2 = st.columns([1, 2])
             with col_a1:
@@ -433,9 +454,11 @@ with tab3:
 
             col_a3, col_a4 = st.columns(2)
             with col_a3:
-                nueva_um_select = st.selectbox("⚖️ Unidad de Medida (UM)", UM_SUGERIDAS)
+                nuevo_grupo = st.selectbox("🏷️ Grupo de Artículos", grupos_disponibles)
             with col_a4:
-                nueva_um_custom = st.text_input("✍️ O escribe una UM personalizada (Opcional)")
+                nueva_um_select = st.selectbox("⚖️ Unidad de Medida (UM)", UM_SUGERIDAS)
+
+            nueva_um_custom = st.text_input("✍️ O escribe una UM personalizada (Opcional)")
 
             btn_crear = st.form_submit_button("➕ Guardar Nuevo Insumo", type="primary", use_container_width=True)
 
@@ -449,7 +472,12 @@ with tab3:
             elif nuevo_codigo in df_inv["CÓDIGO"].values:
                 st.error(f"⚠️ El código **{nuevo_codigo}** ya existe en el inventario.")
             else:
-                nueva_fila = pd.DataFrame([{"CÓDIGO": nuevo_codigo, "INSUMO": nuevo_insumo, "UM": um_final}])
+                nueva_fila = pd.DataFrame([{
+                    "CÓDIGO": nuevo_codigo, 
+                    "INSUMO": nuevo_insumo, 
+                    "UM": um_final, 
+                    "GRUPO DE ARTÍCULOS": nuevo_grupo
+                }])
                 df_inv_actualizado = pd.concat([df_inv, nueva_fila], ignore_index=True)
                 
                 if guardar_inventario(df_inv_actualizado):
@@ -473,11 +501,17 @@ with tab3:
             codigo_edit = fila_edit["CÓDIGO"]
             insumo_edit = fila_edit["INSUMO"]
             um_edit = fila_edit["UM"]
+            grupo_edit = fila_edit["GRUPO DE ARTÍCULOS"]
+
+            grupos_disponibles = sorted(df_inv["GRUPO DE ARTÍCULOS"].unique().tolist())
+            idx_grupo_edit = grupos_disponibles.index(grupo_edit) if grupo_edit in grupos_disponibles else 0
 
             with st.form("form_editar_insumo"):
                 st.info(f"Modificando insumo con código: **{codigo_edit}**")
                 edit_insumo_nombre = st.text_input("📦 Nombre del Insumo", value=insumo_edit)
                 
+                edit_grupo = st.selectbox("🏷️ Grupo de Artículos", grupos_disponibles, index=idx_grupo_edit)
+
                 idx_um_edit = UM_SUGERIDAS.index(um_edit) if um_edit in UM_SUGERIDAS else 0
                 edit_um_select = st.selectbox("⚖️ Unidad de Medida (UM)", UM_SUGERIDAS, index=idx_um_edit)
                 edit_um_custom = st.text_input("✍️ O escribir UM personalizada", value="" if um_edit in UM_SUGERIDAS else um_edit)
@@ -494,6 +528,7 @@ with tab3:
                     idx_m = df_inv[df_inv["CÓDIGO"] == codigo_edit].index[0]
                     df_inv.loc[idx_m, "INSUMO"] = edit_insumo_nombre
                     df_inv.loc[idx_m, "UM"] = um_edit_final
+                    df_inv.loc[idx_m, "GRUPO DE ARTÍCULOS"] = edit_grupo
 
                     if guardar_inventario(df_inv):
                         st.success(f"✅ Insumo **[{codigo_edit}]** actualizado correctamente.")
@@ -516,8 +551,9 @@ with tab3:
             codigo_del = fila_del["CÓDIGO"]
             insumo_del = fila_del["INSUMO"]
             um_del = fila_del["UM"]
+            grupo_del = fila_del["GRUPO DE ARTÍCULOS"]
 
-            st.warning(f"⚠️ ¿Estás seguro de que deseas eliminar **[{codigo_del}] {insumo_del}** ({um_del})?")
+            st.warning(f"⚠️ ¿Estás seguro de que deseas eliminar **[{codigo_del}] {insumo_del}** ({grupo_del} - {um_del})?")
             st.error("Esta acción eliminará el producto del catálogo maestro `inventario.xlsx`.")
 
             if st.button("🗑️ Confirmar y Eliminar Insumo", type="primary", use_container_width=True):
