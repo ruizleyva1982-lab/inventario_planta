@@ -3,7 +3,7 @@ import pandas as pd
 import json
 import os
 import io
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
 
 # ──────────────────────────────────────────────
 # CONFIGURACIÓN GENERAL Y CONSTANTES
@@ -12,6 +12,9 @@ INVENTARIO_PATH = "inventario.xlsx"
 REGISTROS_PATH = "registros_conteo.json"
 EXCEL_REGISTROS = "registros_conteo.xlsx"
 CONTEOS = [1, 2, 3, 4, 5]  # Números de conteo configurados
+
+# Configurar la zona horaria exacta de Perú (UTC-5)
+PERU_TZ = timezone(timedelta(hours=-5))
 
 # Unidades de medida frecuentes para los formularios
 UM_SUGERIDAS = [
@@ -27,26 +30,29 @@ st.set_page_config(page_title="Sistema de Dosimetría e Inventario", page_icon="
 # ──────────────────────────────────────────────
 def cargar_inventario() -> pd.DataFrame:
     """
-    Carga el inventario maestro directamente desde inventario.xlsx sin caché.
+    Carga el inventario maestro desde inventario.xlsx, limpia columnas/valores 
+    y asegura que exista la columna de grupo de artículos.
     """
     try:
         df = pd.read_excel(INVENTARIO_PATH)
-        # Limpiar nombres de columnas quitando espacios extremos y pasando a mayúsculas
         df.columns = [str(c).strip().upper() for c in df.columns]
 
-        # Mapeo de columna Grupo de Artículos
+        # Búsqueda flexible de la columna de grupo
         col_grupo = None
         for col in df.columns:
-            if "GRUPO" in col:
+            if "GRUPO" in col or "ARTICULO" in col:
                 col_grupo = col
                 break
         
-        if col_grupo:
-            df["GRUPO DE ARTÍCULOS"] = df[col_grupo].fillna("").astype(str).str.strip().str.upper()
-        else:
-            df["GRUPO DE ARTÍCULOS"] = ""
+        if col_grupo and col_grupo != "GRUPO DE ARTÍCULOS":
+            df = df.rename(columns={col_grupo: "GRUPO DE ARTÍCULOS"})
 
-        # Limpieza de columnas base
+        if "GRUPO DE ARTÍCULOS" not in df.columns:
+            df["GRUPO DE ARTÍCULOS"] = "GENERAL"
+        else:
+            df["GRUPO DE ARTÍCULOS"] = df["GRUPO DE ARTÍCULOS"].fillna("GENERAL").astype(str).str.strip().str.upper()
+
+        # Limpieza y conversión a texto de columnas principales
         df["CÓDIGO"] = df["CÓDIGO"].fillna("").astype(str).str.strip()
         df["INSUMO"] = df["INSUMO"].fillna("").astype(str).str.strip()
         df["UM"] = df["UM"].fillna("UNIDAD (BIENES)").astype(str).str.strip().str.upper()
@@ -264,16 +270,19 @@ with tab1:
 
     col_fecha, col_grupo, col_buscar = st.columns([2, 3, 4])
     with col_fecha:
-        fecha_sel = st.date_input("📅 Fecha de conteo", value=date.today(), key="fecha_reg")
+        fecha_actual_peru = datetime.now(PERU_TZ).date()
+        fecha_sel = st.date_input("📅 Fecha de conteo", value=fecha_actual_peru, key="fecha_reg")
         fecha_str = fecha_sel.strftime("%Y-%m-%d")
     
     with col_grupo:
-        # Extraer grupos directamente del Excel sin filtrar erróneamente
-        grupos_unicos = sorted([
-            g for g in df_inv["GRUPO DE ARTÍCULOS"].unique() 
-            if str(g).strip() != "" and str(g).upper() != "NAN"
+        grupos_detectados = sorted([
+            str(g) for g in df_inv["GRUPO DE ARTÍCULOS"].unique() 
+            if str(g).strip() and str(g).upper() != "NAN"
         ])
-        lista_grupos = ["-- Todos los grupos --"] + grupos_unicos
+        if not grupos_detectados:
+            grupos_detectados = ["MP & INSUMOS", "ENVASES Y EMBALAJES", "PACKAGING", "INTERMEDIO", "SUMINISTROS", "TIENDAS", "TERMINADO"]
+        
+        lista_grupos = ["-- Todos los grupos --"] + grupos_detectados
         grupo_sel = st.selectbox("🏷️ Grupo de Artículos", lista_grupos, key="grupo_reg_sel")
 
     with col_buscar:
@@ -345,7 +354,7 @@ with tab1:
                     "um": um,
                     "mesas": valores_conteo,
                     "total": total,
-                    "updated": datetime.now().isoformat()
+                    "updated": datetime.now(PERU_TZ).isoformat()
                 }
                 guardar_registros(registros)
                 st.success(f"✅ Registro guardado para **[{codigo}] {insumo_nombre}** el **{fecha_str}**")
@@ -393,7 +402,7 @@ with tab2:
     if not registros:
         st.info("📭 Aún no hay registros guardados en la base de datos.")
     else:
-        fecha_consulta = st.date_input("📅 Seleccione la fecha", value=date.today(), key="fecha_consulta")
+        fecha_consulta = st.date_input("📅 Seleccione la fecha", value=datetime.now(PERU_TZ).date(), key="fecha_consulta")
         fecha_consulta_str = fecha_consulta.strftime("%Y-%m-%d")
         resultados = [v for v in registros.values() if v.get("fecha") == fecha_consulta_str]
 
