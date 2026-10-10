@@ -23,10 +23,10 @@ UM_SUGERIDAS = [
     "GALON", "CAJA x 10KGS", "PQT x 50UND", "SACO x 25KGS", "PAR"
 ]
 
-# Opciones de Ubicación solicitadas
+# Opciones de Ubicación actualizadas con Sala Pesadas
 UBICACIONES_SUGERIDAS = [
     "Anaquel", "Empaque", "Sala Procesos", "Sala Rellenos", 
-    "Camara Rellenos", "Camara Cocina", "Custodia", "Sala Desmolde", "Sala Hornos"
+    "Camara Rellenos", "Camara Cocina", "Custodia", "Sala Desmolde", "Sala Hornos", "Sala Pesadas"
 ]
 
 st.set_page_config(page_title="Sistema de Dosimetría e Inventario", page_icon="🧪", layout="wide")
