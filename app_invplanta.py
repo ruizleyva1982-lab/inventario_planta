@@ -16,14 +16,14 @@ CONTEOS = [1, 2, 3, 4, 5]  # Números de conteo configurados
 # Configurar la zona horaria exacta de Perú (UTC-5)
 PERU_TZ = timezone(timedelta(hours=-5))
 
-# Unidades de medida frecuentes para los formularios
+# Unidades de medida frecuentes para los formularios (con BATCH/PESADAS agregado)
 UM_SUGERIDAS = [
     "UNIDAD (BIENES)", "KILOGRAMO", "UND", "PQT x 100UND", "CAJA", 
     "BOLSA x 1KGS", "BOTELLA", "ROLLO", "LITRO", "PQT x 1000UND", 
-    "GALON", "CAJA x 10KGS", "PQT x 50UND", "SACO x 25KGS", "PAR"
+    "GALON", "CAJA x 10KGS", "PQT x 50UND", "SACO x 25KGS", "PAR", "BATCH/PESADAS"
 ]
 
-# Opciones de Ubicación actualizadas con Sala Pesadas
+# Opciones de Ubicación
 UBICACIONES_SUGERIDAS = [
     "Anaquel", "Empaque", "Sala Procesos", "Sala Rellenos", 
     "Camara Rellenos", "Camara Cocina", "Custodia", "Sala Desmolde", "Sala Hornos", "Sala Pesadas"
@@ -323,7 +323,7 @@ with tab1:
         
         opciones_um_dinamicas = list(dict.fromkeys([
             um_guardada, um_inventario, "UNIDAD (BIENES)", "KILOGRAMO", "UND", 
-            "ROLLO", "CAJA", "BOLSA", "LITRO", "MOLDES", "PLANCHA"
+            "ROLLO", "CAJA", "BOLSA", "LITRO", "MOLDES", "PLANCHA", "BATCH/PESADAS"
         ]))
         idx_um = opciones_um_dinamicas.index(um_guardada) if um_guardada in opciones_um_dinamicas else 0
 
