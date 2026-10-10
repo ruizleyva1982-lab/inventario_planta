@@ -41,9 +41,9 @@ def cargar_inventario() -> pd.DataFrame:
         df["UM"] = df["UM"].fillna("UNIDAD (BIENES)").astype(str).str.strip().str.upper()
         
         if "GRUPO DE ARTÍCULOS" in df.columns:
-            df["GRUPO DE ARTÍCULOS"] = df["GRUPO DE ARTÍCULOS"].fillna("GENERAL").astype(str).str.strip().str.upper()
+            df["GRUPO DE ARTÍCULOS"] = df["GRUPO DE ARTÍCULOS"].astype(str).str.strip().str.upper()
         else:
-            df["GRUPO DE ARTÍCULOS"] = "GENERAL"
+            df["GRUPO DE ARTÍCULOS"] = ""
 
         # Clave única para buscadores en Streamlit
         df["DISPLAY"] = df["CÓDIGO"] + " — " + df["INSUMO"]
@@ -120,7 +120,7 @@ def guardar_excel_registros(data: dict):
             ws.row_dimensions[1].height = 28
             
             # Subencabezados
-            encabezados = ["CÓDIGO", "INSUMO", "GRUPO", "UM", "CONTEO 1", "CONTEO 2", "CONTEO 3", "CONTEO 4", "CONTEO 5", "TOTAL"]
+            encabezados = ["CÓDIGO", "INSUMO", "GRUPO DE ARTÍCULOS", "UM", "CONTEO 1", "CONTEO 2", "CONTEO 3", "CONTEO 4", "CONTEO 5", "TOTAL"]
             for col, h in enumerate(encabezados, 1):
                 c = ws.cell(row=2, column=col, value=h)
                 c.font = Font(name="Arial", bold=True, color="FFFFFF")
@@ -134,7 +134,7 @@ def guardar_excel_registros(data: dict):
                 vals = [
                     reg.get("codigo", ""),
                     reg.get("insumo", ""),
-                    reg.get("grupo", "GENERAL"),
+                    reg.get("grupo", ""),
                     reg.get("um", ""),
                     reg.get("mesas", {}).get("1", 0),
                     reg.get("mesas", {}).get("2", 0),
@@ -168,7 +168,7 @@ def guardar_excel_registros(data: dict):
                 c.alignment = Alignment(horizontal="center")
                 c.border = borde
 
-            for ci, w in enumerate([14, 40, 22, 15, 12, 12, 12, 12, 12, 12], 1):
+            for ci, w in enumerate([14, 40, 25, 15, 12, 12, 12, 12, 12, 12], 1):
                 ws.column_dimensions[get_column_letter(ci)].width = w
 
         wb.save(EXCEL_REGISTROS)
@@ -263,7 +263,8 @@ with tab1:
         fecha_str = fecha_sel.strftime("%Y-%m-%d")
     
     with col_grupo:
-        lista_grupos = ["-- Todos los grupos --"] + sorted(df_inv["GRUPO DE ARTÍCULOS"].unique().tolist())
+        grupos_unicos = sorted([g for g in df_inv["GRUPO DE ARTÍCULOS"].unique() if str(g).strip() != ""])
+        lista_grupos = ["-- Todos los grupos --"] + grupos_unicos
         grupo_sel = st.selectbox("🏷️ Grupo de Artículos", lista_grupos, key="grupo_reg_sel")
 
     with col_buscar:
@@ -363,12 +364,12 @@ with tab1:
         df_dia = df_dia.drop(columns=["mesas"]).rename(columns={
             "codigo": "Código",
             "insumo": "Insumo",
-            "grupo": "Grupo",
+            "grupo": "Grupo de Artículos",
             "total": "Total",
             "um": "UM"
         })
         
-        columnas_ordenadas = ["Código", "Insumo", "Grupo", "UM"] + [f"Conteo {c_num}" for c_num in CONTEOS] + ["Total"]
+        columnas_ordenadas = ["Código", "Insumo", "Grupo de Artículos", "UM"] + [f"Conteo {c_num}" for c_num in CONTEOS] + ["Total"]
         st.dataframe(df_dia[columnas_ordenadas].sort_values("Insumo"), use_container_width=True, hide_index=True)
     else:
         st.info(f"📭 No hay registros para el {fecha_str}")
@@ -398,12 +399,12 @@ with tab2:
                 "fecha": "Fecha",
                 "codigo": "Código",
                 "insumo": "Insumo",
-                "grupo": "Grupo",
+                "grupo": "Grupo de Artículos",
                 "total": "Total",
                 "um": "UM"
             })
             
-            cols_res = ["Código", "Insumo", "Grupo", "UM"] + [f"Conteo {c_num}" for c_num in CONTEOS] + ["Total"]
+            cols_res = ["Código", "Insumo", "Grupo de Artículos", "UM"] + [f"Conteo {c_num}" for c_num in CONTEOS] + ["Total"]
             df_res = df_res[cols_res].sort_values("Insumo")
             
             st.dataframe(df_res, use_container_width=True, hide_index=True)
@@ -443,7 +444,7 @@ with tab3:
         ultimo_num = len(df_inv) + 1
         codigo_sugerido = f"E100{ultimo_num:04d}"
 
-        grupos_disponibles = sorted(df_inv["GRUPO DE ARTÍCULOS"].unique().tolist())
+        grupos_disponibles = sorted([g for g in df_inv["GRUPO DE ARTÍCULOS"].unique() if str(g).strip() != ""])
 
         with st.form("form_nuevo_insumo", clear_on_submit=True):
             col_a1, col_a2 = st.columns([1, 2])
@@ -503,7 +504,7 @@ with tab3:
             um_edit = fila_edit["UM"]
             grupo_edit = fila_edit["GRUPO DE ARTÍCULOS"]
 
-            grupos_disponibles = sorted(df_inv["GRUPO DE ARTÍCULOS"].unique().tolist())
+            grupos_disponibles = sorted([g for g in df_inv["GRUPO DE ARTÍCULOS"].unique() if str(g).strip() != ""])
             idx_grupo_edit = grupos_disponibles.index(grupo_edit) if grupo_edit in grupos_disponibles else 0
 
             with st.form("form_editar_insumo"):
