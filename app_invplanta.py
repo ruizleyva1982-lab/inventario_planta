@@ -25,25 +25,31 @@ st.set_page_config(page_title="Sistema de Dosimetría e Inventario", page_icon="
 # ──────────────────────────────────────────────
 # FUNCIONES DE CARGA Y PERSISTENCIA
 # ──────────────────────────────────────────────
-@st.cache_data(ttl=60)
 def cargar_inventario() -> pd.DataFrame:
     """
-    Carga el inventario maestro desde inventario.xlsx, limpia columnas/valores 
-    y crea una columna 'DISPLAY' para las búsquedas.
+    Carga el inventario maestro directamente desde inventario.xlsx sin caché.
     """
     try:
         df = pd.read_excel(INVENTARIO_PATH)
-        df.columns = [c.strip().upper() for c in df.columns]
+        # Limpiar nombres de columnas quitando espacios extremos y pasando a mayúsculas
+        df.columns = [str(c).strip().upper() for c in df.columns]
 
-        # Limpieza y conversión a texto
-        df["CÓDIGO"] = df["CÓDIGO"].astype(str).str.strip()
-        df["INSUMO"] = df["INSUMO"].astype(str).str.strip()
-        df["UM"] = df["UM"].fillna("UNIDAD (BIENES)").astype(str).str.strip().str.upper()
+        # Mapeo de columna Grupo de Artículos
+        col_grupo = None
+        for col in df.columns:
+            if "GRUPO" in col:
+                col_grupo = col
+                break
         
-        if "GRUPO DE ARTÍCULOS" in df.columns:
-            df["GRUPO DE ARTÍCULOS"] = df["GRUPO DE ARTÍCULOS"].astype(str).str.strip().str.upper()
+        if col_grupo:
+            df["GRUPO DE ARTÍCULOS"] = df[col_grupo].fillna("").astype(str).str.strip().str.upper()
         else:
             df["GRUPO DE ARTÍCULOS"] = ""
+
+        # Limpieza de columnas base
+        df["CÓDIGO"] = df["CÓDIGO"].fillna("").astype(str).str.strip()
+        df["INSUMO"] = df["INSUMO"].fillna("").astype(str).str.strip()
+        df["UM"] = df["UM"].fillna("UNIDAD (BIENES)").astype(str).str.strip().str.upper()
 
         # Clave única para buscadores en Streamlit
         df["DISPLAY"] = df["CÓDIGO"] + " — " + df["INSUMO"]
@@ -55,13 +61,12 @@ def cargar_inventario() -> pd.DataFrame:
 
 def guardar_inventario(df: pd.DataFrame) -> bool:
     """
-    Guarda las columnas base del maestro en inventario.xlsx y limpia la caché.
+    Guarda las columnas base del maestro en inventario.xlsx.
     """
     try:
         cols_guardar = ["CÓDIGO", "INSUMO", "UM", "GRUPO DE ARTÍCULOS"]
         df_export = df[cols_guardar].copy()
         df_export.to_excel(INVENTARIO_PATH, index=False)
-        cargar_inventario.clear()
         return True
     except PermissionError:
         st.error("⚠️ No se pudo guardar porque **inventario.xlsx** está abierto en Excel. Ciérralo e intentalo de nuevo.")
@@ -263,7 +268,11 @@ with tab1:
         fecha_str = fecha_sel.strftime("%Y-%m-%d")
     
     with col_grupo:
-        grupos_unicos = sorted([g for g in df_inv["GRUPO DE ARTÍCULOS"].unique() if str(g).strip() != ""])
+        # Extraer grupos directamente del Excel sin filtrar erróneamente
+        grupos_unicos = sorted([
+            g for g in df_inv["GRUPO DE ARTÍCULOS"].unique() 
+            if str(g).strip() != "" and str(g).upper() != "NAN"
+        ])
         lista_grupos = ["-- Todos los grupos --"] + grupos_unicos
         grupo_sel = st.selectbox("🏷️ Grupo de Artículos", lista_grupos, key="grupo_reg_sel")
 
@@ -444,7 +453,10 @@ with tab3:
         ultimo_num = len(df_inv) + 1
         codigo_sugerido = f"E100{ultimo_num:04d}"
 
-        grupos_disponibles = sorted([g for g in df_inv["GRUPO DE ARTÍCULOS"].unique() if str(g).strip() != ""])
+        grupos_disponibles = sorted([
+            g for g in df_inv["GRUPO DE ARTÍCULOS"].unique() 
+            if str(g).strip() != "" and str(g).upper() != "NAN"
+        ])
 
         with st.form("form_nuevo_insumo", clear_on_submit=True):
             col_a1, col_a2 = st.columns([1, 2])
@@ -504,7 +516,10 @@ with tab3:
             um_edit = fila_edit["UM"]
             grupo_edit = fila_edit["GRUPO DE ARTÍCULOS"]
 
-            grupos_disponibles = sorted([g for g in df_inv["GRUPO DE ARTÍCULOS"].unique() if str(g).strip() != ""])
+            grupos_disponibles = sorted([
+                g for g in df_inv["GRUPO DE ARTÍCULOS"].unique() 
+                if str(g).strip() != "" and str(g).upper() != "NAN"
+            ])
             idx_grupo_edit = grupos_disponibles.index(grupo_edit) if grupo_edit in grupos_disponibles else 0
 
             with st.form("form_editar_insumo"):
