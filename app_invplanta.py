@@ -247,19 +247,25 @@ with tab1:
         fila = df_inv[df_inv["DISPLAY"] == opcion_sel].iloc[0]
         codigo, insumo_nombre, um_inventario, grupo_inventario = fila["CÓDIGO"], fila["INSUMO"], fila["UM"], fila["GRUPO DE ARTÍCULOS"]
 
-        # Selector de Unidad de Medida para este registro en particular
         c1, c2, c3, c4 = st.columns(4)
         c1.markdown(f"<div class='metric-box'>🔑 <b>Código</b><br>{codigo}</div>", unsafe_allow_html=True)
         c2.markdown(f"<div class='metric-box'>📦 <b>Insumo</b><br>{insumo_nombre}</div>", unsafe_allow_html=True)
         c3.markdown(f"<div class='metric-box'>🏷️ <b>Grupo</b><br>{grupo_inventario}</div>", unsafe_allow_html=True)
         with c4:
             opciones_um = list(dict.fromkeys([um_inventario] + UM_SUGERIDAS))
-            um_elegida = st.selectbox("⚖️ Unidad de Medida (UM)", opciones_um_dinamicas if 'opciones_um_dinamicas' in locals() else opciones_um, key=f"um_sel_{codigo}")
+            um_elegida = st.selectbox("⚖️ Unidad de Medida (UM)", opciones_um, key=f"um_sel_{codigo}")
 
         # CLAVE ÚNICA INDEPENDIENTE: Fecha + Código + UM + Ubicación
         clave = f"{fecha_str}__{codigo}__{um_elegida}__{ubicacion_sel}"
         existente = registros.get(clave, {})
         mesas_previas = existente.get("mesas", {str(c): 0 for c in CONTEOS})
+
+        # Sincronizar session_state para cargar los valores guardados en los number_input
+        for c_num in CONTEOS:
+            widget_key = f"conteo_{c_num}_{clave}"
+            val_guardado = float(mesas_previas.get(str(c_num), 0))
+            if widget_key not in st.session_state:
+                st.session_state[widget_key] = val_guardado
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("### 🔢 Desglose de Conteos")
@@ -271,7 +277,6 @@ with tab1:
                 valores_conteo[str(c_num)] = st.number_input(
                     f"Conteo {c_num}",
                     min_value=0.0,
-                    value=float(mesas_previas.get(str(c_num), 0)),
                     step=0.5,
                     key=f"conteo_{c_num}_{clave}"
                 )
@@ -296,7 +301,7 @@ with tab1:
                 }
                 guardar_registros(registros)
                 st.success(f"✅ Registro guardado para **[{codigo}] {insumo_nombre}** ({um_elegida} - {ubicacion_sel}) el **{fecha_str}**")
-                st.balloons()
+                st.rerun()
 
         with col_eliminar:
             if clave in registros:
@@ -341,7 +346,7 @@ with tab2:
     else:
         fecha_consulta = st.date_input("📅 Seleccione la fecha", value=datetime.now(PERU_TZ).date(), key="fecha_consulta")
         fecha_consulta_str = fecha_consulta.strftime("%Y-%m-%d")
-        resultados = [v for v in registros.values() if v.get("fecha") == fecha_consulta_str]
+        resultados = [v for v in registros.values() if v.get("fecha"] == fecha_consulta_str]
 
         if resultados:
             st.success(f"✅ **{len(resultados)}** registros encontrados para la fecha **{fecha_consulta_str}**")
