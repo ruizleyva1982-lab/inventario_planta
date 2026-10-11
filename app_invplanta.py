@@ -346,7 +346,7 @@ with tab2:
     else:
         fecha_consulta = st.date_input("📅 Seleccione la fecha", value=datetime.now(PERU_TZ).date(), key="fecha_consulta")
         fecha_consulta_str = fecha_consulta.strftime("%Y-%m-%d")
-        resultados = [v for v in registros.values() if v.get("fecha"] == fecha_consulta_str]
+        resultados = [v for v in registros.values() if v.get("fecha") == fecha_consulta_str]
 
         if resultados:
             st.success(f"✅ **{len(resultados)}** registros encontrados para la fecha **{fecha_consulta_str}**")
